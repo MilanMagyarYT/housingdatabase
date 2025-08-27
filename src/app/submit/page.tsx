@@ -1,4 +1,3 @@
-// src/app/submit/page.tsx
 "use client";
 
 import * as React from "react";
@@ -13,11 +12,22 @@ import FurnishingAndFacilities from "./FurnishedAndFacilities";
 import ContextVerification from "./ContextVerification";
 import SubmitBar from "./SubmitBar";
 import BottomSpacer from "./BottomSpace";
-import { db } from "@/lib/firebase";
-import { collection, doc, setDoc, serverTimestamp } from "firebase/firestore";
-import crypto from "crypto-js"; // npm i crypto-js
+import { saveSubmission } from "@/lib/submit/saveSubmission";
+import ThankYouDialog from "./ThankYouDialog";
+
+function getErrorMessage(err: unknown) {
+  if (err instanceof Error) return err.message;
+  if (typeof err === "string") return err;
+  try {
+    return JSON.stringify(err);
+  } catch {
+    return "Failed to save submission.";
+  }
+}
 
 export default function SubmitHousingPage() {
+  const [thanksOpen, setThanksOpen] = React.useState(false);
+
   const [data, setData] = React.useState<FormState>({
     facilities: [],
     registration: null,
@@ -28,7 +38,6 @@ export default function SubmitHousingPage() {
   const set = <K extends keyof FormState>(k: K, v: FormState[K]) =>
     setData((d) => ({ ...d, [k]: v }));
 
-  // Auto total
   React.useEffect(() => {
     const base = numberOr0(data.baseRent);
     const svc = numberOr0(data.service);
@@ -57,28 +66,16 @@ export default function SubmitHousingPage() {
 
   const onSubmit = async () => {
     try {
-      if (!data.email) {
-        alert("Email is required for verification");
-        return;
-      }
-
-      // hash email so we don’t store raw PII
-      const emailHash = crypto.SHA256(data.email).toString();
-
-      // reference: /listings/{emailHash}/submissions/{autoId}
-      const subRef = doc(collection(db, "listings", emailHash, "submissions"));
-
-      await setDoc(subRef, {
-        ...data,
-        emailHash,
-        timestamp: serverTimestamp(),
-      });
-
-      alert("Submission saved!");
-    } catch (err) {
+      await saveSubmission(data);
+      setThanksOpen(true);
+    } catch (err: unknown) {
       console.error(err);
-      alert("Failed to save submission");
+      alert(getErrorMessage(err));
     }
+  };
+
+  const handleThanksClose = () => {
+    setThanksOpen(false);
   };
 
   return (
@@ -125,6 +122,9 @@ export default function SubmitHousingPage() {
             onSubmit={onSubmit}
           />
         )}
+
+        {/* Add the dialog here */}
+        <ThankYouDialog open={thanksOpen} onClose={handleThanksClose} />
 
         <BottomSpacer />
       </Box>
